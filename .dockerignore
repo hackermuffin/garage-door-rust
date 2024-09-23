@@ -1,0 +1,6 @@
+# Ignore everything
+*
+
+# Allow src folder
+!/src
+!/Cargo.*
