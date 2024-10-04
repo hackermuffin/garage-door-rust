@@ -4,3 +4,4 @@
 # Allow src folder
 !/src
 !/Cargo.*
+!/.cargo
