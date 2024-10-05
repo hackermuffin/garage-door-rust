@@ -6,9 +6,12 @@ mod state;
 mod timeout;
 mod web;
 
-static STATE: Mutex<state::State> = Mutex::const_new(state::initial_state());
-
 #[tokio::main]
 async fn main() {
-    let _ = join!(discord::main(), web::main(), timeout::main());
+    let state: &'static Mutex<state::State> = leak(Mutex::new(state::initial_state()));
+    let _ = join!(discord::main(state), web::main(state), timeout::main(state));
+}
+
+fn leak<T>(x: T) -> &'static mut T {
+    Box::leak(Box::new(x))
 }

@@ -21,7 +21,7 @@ pub struct State {
     current_ping_interval: TimeDelta,
 }
 
-pub const fn initial_state() -> State {
+pub fn initial_state() -> State {
     State {
         status: DoorPosition::Missing,
         last_update: None,

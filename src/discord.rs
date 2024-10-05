@@ -12,7 +12,8 @@ use futures::future;
 use tokio::join;
 use tokio::time::{sleep, Duration};
 
-use crate::STATE;
+use crate::state::State;
+use crate::Mutex;
 
 const DISCORD_PING_LOOP_INTERVAL: Duration = Duration::from_secs(1);
 const DISCORD_PRESENCE_LOOP_INTERVAL: Duration = Duration::from_secs(1);
@@ -21,13 +22,13 @@ const DISCORD_LOG_LOOP_INTERVAL: Duration = Duration::from_secs(1);
 const DISCORD_PING_CHANNEL: &str = "pings";
 const DISCORD_LOG_CHANNEL: &str = "log";
 
-async fn update_status(ctx: Context) {
+async fn update_status(state: &Mutex<State>, ctx: Context) {
     loop {
         // Get current presence
         // TODO
 
         // Set presence
-        let state = STATE.lock().await;
+        let state = state.lock().await;
         let status = state.status;
         drop(state);
         let presence = match status {
@@ -41,12 +42,12 @@ async fn update_status(ctx: Context) {
     }
 }
 
-async fn check_ping(ctx: Context, data_about_bot: Ready) {
+async fn check_ping(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
     loop {
         // Check if ping needs to be sent
-        let state = STATE.lock().await;
-        let ping = state.check_send_ping();
-        drop(state);
+        let open_state = state.lock().await;
+        let ping = open_state.check_send_ping();
+        drop(open_state);
 
         // Send ping
         if let Some(ping) = ping {
@@ -56,20 +57,20 @@ async fn check_ping(ctx: Context, data_about_bot: Ready) {
             }
 
             // Update state
-            let mut state = STATE.lock().await;
-            state.ping_sent();
-            drop(state);
+            let mut open_state = state.lock().await;
+            open_state.ping_sent();
+            drop(open_state);
         }
 
         sleep(DISCORD_PING_LOOP_INTERVAL).await;
     }
 }
 
-async fn log(ctx: Context, data_about_bot: Ready) {
-    let mut prev_status = STATE.lock().await.status;
+async fn log(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
+    let mut prev_status = state.lock().await.status;
     loop {
         // Get current status
-        let status = STATE.lock().await.status;
+        let status = state.lock().await.status;
 
         if status != prev_status {
             let msg = format!("Status updated to {:?}.", status);
@@ -115,15 +116,17 @@ async fn send_message(
     Ok(())
 }
 
-struct Handler;
+struct Handler<'a> {
+    state: &'a Mutex<State>,
+}
 
 #[async_trait]
-impl EventHandler for Handler {
+impl<'a> EventHandler for Handler<'a> {
     async fn ready(&self, ctx: Context, data_about_bot: Ready) {
         join![
-            update_status(ctx.clone()),
-            check_ping(ctx.clone(), data_about_bot.clone()),
-            log(ctx, data_about_bot)
+            update_status(self.state, ctx.clone()),
+            check_ping(self.state, ctx.clone(), data_about_bot.clone()),
+            log(self.state, ctx, data_about_bot)
         ];
     }
     async fn message(&self, ctx: Context, msg: Message) {
@@ -136,9 +139,9 @@ impl EventHandler for Handler {
     }
 }
 
-pub async fn main() {
+pub async fn main(state: &'static Mutex<State>) {
     // Login with a bot token from the environment
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+    let token = env::var("DISCORD_TOKEN").expect("Could not find DISCORD_ENV");
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
@@ -146,7 +149,7 @@ pub async fn main() {
 
     // Create a new instance of the Client, logging in as a bot.
     let mut client = Client::builder(&token, intents)
-        .event_handler(Handler)
+        .event_handler(Handler { state })
         .await
         .expect("Err creating client");
 
