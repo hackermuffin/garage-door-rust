@@ -1,9 +1,7 @@
 use chrono::prelude::*;
 use chrono::TimeDelta;
-
-//const BASE_PING_INTERVAL: TimeDelta = TimeDelta::minutes(10);
-const BASE_PING_INTERVAL: TimeDelta = TimeDelta::seconds(10);
-const MISSING_TIMEOUT: TimeDelta = TimeDelta::minutes(1);
+use std::{env, fmt};
+use tokio::time::Duration;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum DoorPosition {
@@ -14,7 +12,8 @@ pub enum DoorPosition {
 
 #[derive(Debug)]
 pub struct State {
-    pub status: DoorPosition,
+    consts: Consts,
+    status: DoorPosition,
     last_update: Option<DateTime<Local>>,
     open_time: Option<DateTime<Local>>,
     pings_sent: u32,
@@ -22,16 +21,26 @@ pub struct State {
 }
 
 pub fn initial_state() -> State {
+    let consts = Consts::new();
     State {
+        current_ping_interval: consts.starting_ping_interval,
+        consts,
         status: DoorPosition::Missing,
         last_update: None,
         open_time: None,
         pings_sent: 0,
-        current_ping_interval: BASE_PING_INTERVAL,
     }
 }
 
 impl State {
+    pub fn consts(&self) -> &Consts {
+        &self.consts
+    }
+
+    pub fn status(&self) -> &DoorPosition {
+        &self.status
+    }
+
     pub fn open(&mut self) {
         self.status = DoorPosition::Open;
         self.last_update = Some(Local::now());
@@ -44,7 +53,7 @@ impl State {
         self.last_update = Some(Local::now());
         self.open_time = None;
         self.pings_sent = 0;
-        self.current_ping_interval = BASE_PING_INTERVAL;
+        self.current_ping_interval = self.consts.starting_ping_interval;
     }
     pub fn missing(&mut self) {
         self.status = DoorPosition::Missing;
@@ -55,7 +64,7 @@ impl State {
                 None => {}
                 Some(last_update) => {
                     let diff = Local::now() - last_update;
-                    if diff > MISSING_TIMEOUT {
+                    if diff > self.consts.missing_timeout {
                         self.missing();
                     }
                 }
@@ -94,5 +103,85 @@ impl State {
         self.current_ping_interval = self.current_ping_interval * 2;
 
         // TODO: should confirm time diff is greater than current_ping_interval
+    }
+}
+
+// Store const data that should be setup once then read only accessible through state
+#[derive(Debug, Clone)]
+pub struct Consts {
+    // Discord bot token
+    pub discord_token: String,
+
+    // Wait interval between discord updates
+    pub discord_ping_loop_interval: Duration,
+    pub discord_presence_loop_interval: Duration,
+    pub discord_log_loop_interval: Duration,
+
+    // Discord channels to use
+    pub discord_ping_channel: String,
+    pub discord_log_channel: String,
+
+    // Missing times
+    pub missing_loop_interval: Duration,
+    pub missing_timeout: TimeDelta,
+
+    // Other timing consts
+    pub starting_ping_interval: TimeDelta,
+}
+
+impl Consts {
+    // Handling initialisation of the constant data. Will panic if invalid config in env
+    pub fn new() -> Consts {
+        fn get_env(name: &str) -> Option<String> {
+            env::var(name).ok()
+        }
+
+        fn get_duration(env_var: &str, default: Duration) -> Duration {
+            let env = get_env(env_var);
+            match env {
+                Some(str) => {
+                    let val = str
+                        .parse::<u64>()
+                        .unwrap_or_else(|_| panic!("Invalid duration {}", str));
+                    Duration::from_secs(val)
+                }
+                None => default,
+            }
+        }
+
+        fn get_timedelta(env_var: &str, default: TimeDelta) -> TimeDelta {
+            let env = get_env(env_var);
+            match env {
+                Some(str) => {
+                    let val = str
+                        .parse::<i64>()
+                        .unwrap_or_else(|_| panic!("Invalid duration {}", str));
+                    TimeDelta::seconds(val)
+                }
+                None => default,
+            }
+        }
+
+        Consts {
+            discord_token: get_env("DISCORD_TOKEN")
+                .expect("Could not retrive anv var DISCORD_TOKEN"),
+            discord_ping_loop_interval: get_duration(
+                "DISCORD_PING_LOOP_INTERVAL",
+                Duration::from_secs(1),
+            ),
+            discord_presence_loop_interval: get_duration(
+                "DISCORD_PRESENCE_LOOP_INTERVAL",
+                Duration::from_secs(1),
+            ),
+            discord_log_loop_interval: get_duration(
+                "DISCORD_LOG_LOOP_INTERVAL",
+                Duration::from_secs(1),
+            ),
+            discord_ping_channel: get_env("DISCORD_PING_CHANNEL").unwrap_or("pings".to_string()),
+            discord_log_channel: get_env("DISCORD_LOG_CHANNEL").unwrap_or("log".to_string()),
+            missing_loop_interval: get_duration("MISSING_LOOP_INTERVAL", Duration::from_secs(1)),
+            missing_timeout: get_timedelta("MISSING_TIMEOUT", TimeDelta::minutes(1)),
+            starting_ping_interval: get_timedelta("STARTING_PING_INTERVAL", TimeDelta::seconds(10)),
+        }
     }
 }

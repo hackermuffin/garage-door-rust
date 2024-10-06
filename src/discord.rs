@@ -6,31 +6,22 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::prelude::*;
-use std::env;
 
 use futures::future;
 use tokio::join;
-use tokio::time::{sleep, Duration};
+use tokio::time::sleep;
 
 use crate::state::State;
 use crate::Mutex;
 
-const DISCORD_PING_LOOP_INTERVAL: Duration = Duration::from_secs(1);
-const DISCORD_PRESENCE_LOOP_INTERVAL: Duration = Duration::from_secs(1);
-const DISCORD_LOG_LOOP_INTERVAL: Duration = Duration::from_secs(1);
-
-const DISCORD_PING_CHANNEL: &str = "pings";
-const DISCORD_LOG_CHANNEL: &str = "log";
-
 async fn update_status(state: &Mutex<State>, ctx: Context) {
+    let discord_presence_loop_interval = state.lock().await.consts().discord_presence_loop_interval;
     loop {
         // Get current presence
         // TODO
 
         // Set presence
-        let state = state.lock().await;
-        let status = state.status;
-        drop(state);
+        let status = *state.lock().await.status();
         let presence = match status {
             crate::state::DoorPosition::Open => "Open",
             crate::state::DoorPosition::Closed => "Closed",
@@ -38,11 +29,12 @@ async fn update_status(state: &Mutex<State>, ctx: Context) {
         };
         ctx.set_presence(Some(ActivityData::playing(presence)), OnlineStatus::Online);
 
-        sleep(DISCORD_PRESENCE_LOOP_INTERVAL).await;
+        sleep(discord_presence_loop_interval).await;
     }
 }
 
 async fn check_ping(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
+    let consts = state.lock().await.consts().clone();
     loop {
         // Check if ping needs to be sent
         let open_state = state.lock().await;
@@ -51,7 +43,8 @@ async fn check_ping(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
 
         // Send ping
         if let Some(ping) = ping {
-            let res = send_message(&ctx, &data_about_bot, DISCORD_PING_CHANNEL, &ping).await;
+            let res =
+                send_message(&ctx, &data_about_bot, &consts.discord_ping_channel, &ping).await;
             if let Err(e) = res {
                 println!("Error encoundered during ping: {}", e);
             }
@@ -62,19 +55,20 @@ async fn check_ping(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
             drop(open_state);
         }
 
-        sleep(DISCORD_PING_LOOP_INTERVAL).await;
+        sleep(consts.discord_ping_loop_interval).await;
     }
 }
 
 async fn log(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
-    let mut prev_status = state.lock().await.status;
+    let consts = state.lock().await.consts().clone();
+    let mut prev_status = *state.lock().await.status();
     loop {
         // Get current status
-        let status = state.lock().await.status;
+        let status = *state.lock().await.status();
 
         if status != prev_status {
             let msg = format!("Status updated to {:?}.", status);
-            let res = send_message(&ctx, &data_about_bot, DISCORD_LOG_CHANNEL, &msg).await;
+            let res = send_message(&ctx, &data_about_bot, &consts.discord_log_channel, &msg).await;
 
             if let Err(e) = res {
                 println! {"Error logging: {}", e}
@@ -83,7 +77,7 @@ async fn log(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
             prev_status = status;
         }
 
-        sleep(DISCORD_LOG_LOOP_INTERVAL).await;
+        sleep(consts.discord_log_loop_interval).await;
     }
 }
 
@@ -141,7 +135,7 @@ impl<'a> EventHandler for Handler<'a> {
 
 pub async fn main(state: &'static Mutex<State>) {
     // Login with a bot token from the environment
-    let token = env::var("DISCORD_TOKEN").expect("Could not find DISCORD_ENV");
+    let token = state.lock().await.consts().discord_token.clone();
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
