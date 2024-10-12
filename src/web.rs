@@ -17,11 +17,11 @@ async fn serve(state: &Mutex<State>, mut _req: Request<()>) -> tide::Result {
 async fn update(state: &Mutex<State>, mut req: Request<()>) -> tide::Result {
     let data = req.body_bytes().await.unwrap()[0];
     match data as char {
-        '0' => {
+        '1' => {
             state.lock().await.close();
             Ok("Status updated to closed\n".into())
         }
-        '1' => {
+        '0' => {
             state.lock().await.open();
             Ok("Status updated to open\n".into())
         }
