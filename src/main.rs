@@ -8,7 +8,7 @@ mod web;
 
 #[tokio::main]
 async fn main() {
-    let state: &'static Mutex<state::State> = leak(Mutex::new(state::initial_state()));
+    let state: &'static Mutex<state::State> = leak(Mutex::new(state::State::new()));
     let _ = join!(discord::main(state), web::main(state), timeout::main(state));
 }
 

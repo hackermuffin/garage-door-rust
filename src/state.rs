@@ -1,18 +1,32 @@
 use chrono::{prelude::*, TimeDelta};
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};
-use std::env;
+use std::{env, fmt};
 use tokio::time::Duration;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize)]
 pub enum DoorPosition {
     Open,
     Closed,
     Missing,
 }
 
+impl fmt::Display for DoorPosition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Open => "open",
+                Self::Closed => "closed",
+                Self::Missing => "missing",
+            }
+        )
+    }
+}
+
 #[serde_as]
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct State {
     consts: Consts,
     status: DoorPosition,
@@ -23,19 +37,19 @@ pub struct State {
     current_ping_interval: TimeDelta,
 }
 
-pub fn initial_state() -> State {
-    let consts = Consts::new();
-    State {
-        current_ping_interval: consts.starting_ping_interval,
-        consts,
-        status: DoorPosition::Missing,
-        last_update: None,
-        open_time: None,
-        pings_sent: 0,
-    }
-}
-
 impl State {
+    pub fn new() -> State {
+        let consts = Consts::new();
+        State {
+            current_ping_interval: consts.starting_ping_interval,
+            consts,
+            status: DoorPosition::Missing,
+            last_update: None,
+            open_time: None,
+            pings_sent: 0,
+        }
+    }
+
     pub fn consts(&self) -> &Consts {
         &self.consts
     }
@@ -81,7 +95,7 @@ impl State {
                     let diff = Local::now() - self.last_update.unwrap();
                     if diff > self.current_ping_interval {
                         return Some(format!(
-                            "Door is missing for {}",
+                            "@everyone Door is missing for {}",
                             self.current_ping_interval
                         ));
                     }
@@ -92,7 +106,10 @@ impl State {
                 if self.open_time.is_some() {
                     let diff = Local::now() - self.open_time.unwrap();
                     if diff > self.current_ping_interval {
-                        return Some(format!("Door is open for {}", self.current_ping_interval));
+                        return Some(format!(
+                            "@everyone Door is open for {}",
+                            self.current_ping_interval
+                        ));
                     }
                 }
                 None

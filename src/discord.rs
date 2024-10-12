@@ -1,15 +1,11 @@
-use http_types::Result;
-use serenity::all::OnlineStatus;
-use serenity::async_trait;
-use serenity::gateway::ActivityData;
-use serenity::model::channel::Message;
-use serenity::model::gateway::Ready;
-use serenity::model::id::GuildId;
-use serenity::prelude::*;
-
 use futures::future;
-use tokio::join;
-use tokio::time::sleep;
+use http_types::Result;
+use serenity::{
+    all::{ActivityData, GuildId, Message, OnlineStatus, Ready},
+    async_trait,
+    prelude::*,
+};
+use tokio::{join, time::sleep};
 
 use crate::state::State;
 use crate::Mutex;
@@ -17,8 +13,8 @@ use crate::Mutex;
 async fn update_status(state: &Mutex<State>, ctx: Context) {
     let discord_presence_loop_interval = state.lock().await.consts().discord_presence_loop_interval;
     loop {
-        // Get current presence
-        // TODO
+        // TODO retrieve current presence
+        // TODO set up discord rich presence
 
         // Set presence
         let status = *state.lock().await.status();
@@ -67,7 +63,7 @@ async fn log(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
         let status = *state.lock().await.status();
 
         if status != prev_status {
-            let msg = format!("Status updated to {:?}.", status);
+            let msg = format!("Status updated to {}.", status);
             let res = send_message(&ctx, &data_about_bot, &consts.discord_log_channel, &msg).await;
 
             if let Err(e) = res {
@@ -88,7 +84,6 @@ async fn send_message(
     channel_name: &str,
     message: &str,
 ) -> Result<()> {
-    //Result<Vec<Result<Message, http_types::Error>>> {
     let guilds: Vec<GuildId> = data_about_bot.guilds.iter().map(|x| x.id).collect();
     let all_channels =
         future::try_join_all(guilds.iter().map(|x| x.channels(ctx.http.clone()))).await?;
