@@ -1,22 +1,25 @@
-use chrono::prelude::*;
-use chrono::TimeDelta;
-use std::{env, fmt};
+use chrono::{prelude::*, TimeDelta};
+use serde::Serialize;
+use serde_with::{serde_as, DisplayFromStr};
+use std::env;
 use tokio::time::Duration;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 pub enum DoorPosition {
     Open,
     Closed,
     Missing,
 }
 
-#[derive(Debug)]
+#[serde_as]
+#[derive(Debug, Serialize)]
 pub struct State {
     consts: Consts,
     status: DoorPosition,
     last_update: Option<DateTime<Local>>,
     open_time: Option<DateTime<Local>>,
     pings_sent: u32,
+    #[serde_as(as = "DisplayFromStr")]
     current_ping_interval: TimeDelta,
 }
 
@@ -107,9 +110,11 @@ impl State {
 }
 
 // Store const data that should be setup once then read only accessible through state
-#[derive(Debug, Clone)]
+#[serde_as]
+#[derive(Debug, Clone, Serialize)]
 pub struct Consts {
     // Discord bot token
+    #[serde(skip_serializing)]
     pub discord_token: String,
 
     // Wait interval between discord updates
@@ -123,9 +128,11 @@ pub struct Consts {
 
     // Missing times
     pub missing_loop_interval: Duration,
+    #[serde_as(as = "DisplayFromStr")]
     pub missing_timeout: TimeDelta,
 
     // Other timing consts
+    #[serde_as(as = "DisplayFromStr")]
     pub starting_ping_interval: TimeDelta,
 }
 

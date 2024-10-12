@@ -7,7 +7,11 @@ const ADDR: &str = "0.0.0.0";
 const PORT: u16 = 3000;
 
 async fn serve(state: &Mutex<State>, mut _req: Request<()>) -> tide::Result {
-    Ok(format!("{:?}\n", state.lock().await).into())
+    let json = serde_json::to_string_pretty(&*state.lock().await);
+    match json {
+        Ok(json) => Ok(format!("{}\n", json).into()),
+        Err(_) => Ok(Response::new(500)),
+    }
 }
 
 async fn update(state: &Mutex<State>, mut req: Request<()>) -> tide::Result {
