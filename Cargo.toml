@@ -17,3 +17,5 @@ serde_json = "1.0.128"
 serde_with = "3.11.0"
 log = "0.4.22"
 env_logger = "0.11.5"
+async-std = "1.13.0"
+async-h1 = { git = "https://github.com/http-rs/async-h1", branch = "v3" }

@@ -1,5 +1,12 @@
-use log::{error, trace};
-use tide::{Request, Response};
+use async_std::net::{TcpListener, TcpStream};
+use async_std::prelude::*;
+use async_std::task;
+use http_types::Request;
+use http_types::{
+    Method::{Get, Post},
+    Response, StatusCode,
+};
+use log::{debug, error, info, trace, warn};
 
 use crate::state::State;
 use crate::Mutex;
@@ -7,49 +14,79 @@ use crate::Mutex;
 const ADDR: &str = "0.0.0.0";
 const PORT: u16 = 3000;
 
-async fn serve(state: &Mutex<State>, mut _req: Request<()>) -> tide::Result {
-    trace!("Get request recieved...");
+pub async fn main(state: &'static Mutex<State>) -> http_types::Result<()> {
+    // Open up a TCP connection and create a URL.
+    let listener = TcpListener::bind((ADDR, PORT)).await?;
+    let addr = format!("http://{}", listener.local_addr()?);
+
+    info!("Web server listening on {}", addr);
+
+    // For each incoming TCP connection, spawn a task and call `accept`.
+    let mut incoming = listener.incoming();
+    while let Some(stream) = incoming.next().await {
+        let stream = stream?;
+        task::spawn(async {
+            if let Err(err) = accept(state, stream).await {
+                error!("Web server error: {}", err);
+            }
+        });
+    }
+    Ok(())
+}
+
+// Take a TCP stream, and convert it into sequential HTTP request / response pairs.
+async fn accept(state: &'static Mutex<State>, stream: TcpStream) -> http_types::Result<()> {
+    trace!("Acception web connection from {}", stream.peer_addr()?);
+    let opts = async_h1::ServerOptions::default().with_default_host("localhost");
+    async_h1::accept_with_opts(
+        stream.clone(),
+        |req| async move {
+            match req.method() {
+                Get => serve(state).await,
+                Post => update(state, req).await,
+                _ => Response::new(StatusCode::MethodNotAllowed),
+            }
+        },
+        opts,
+    )
+    .await?;
+    Ok(())
+}
+
+async fn serve(state: &'static Mutex<State>) -> Response {
+    debug!("Get request recieved...");
     let json = serde_json::to_string_pretty(&*state.lock().await);
     match json {
         Ok(json) => {
             trace!("Responding with {json}");
-            Ok(format!("{}\n", json).into())
+            json.into()
         }
-        Err(_) => {
-            error!("Failed to generate json of internal state!");
-            Ok(Response::new(500))
+        Err(e) => {
+            error!("Error generating json state: {e}");
+            Response::new(500)
         }
     }
 }
 
-async fn update(state: &Mutex<State>, mut req: Request<()>) -> tide::Result {
+async fn update(state: &'static Mutex<State>, mut req: Request) -> Response {
     trace!("Post request recieved");
     let data = req.body_bytes().await.unwrap()[0];
     match data as char {
         '1' => {
+            trace!("Updating state to closed");
             state.lock().await.close();
-            Ok("Status updated to closed\n".into())
+            "Status updated to closed\n".into()
         }
         '0' => {
+            trace!("Updating state to open");
             state.lock().await.open();
-            Ok("Status updated to open\n".into())
+            "Status updated to open\n".into()
         }
         _ => {
             // Invalid update
+            warn!("Invalid data recieved: {data}, updating to missing.");
             state.lock().await.missing();
-
-            let resp = Response::new(418);
-            Ok(resp)
+            Response::new(418)
         }
     }
-}
-
-pub async fn main(state: &'static Mutex<State>) {
-    trace!("Starting web server...");
-    let mut app = tide::new();
-    app.at("/").get(|x| serve(state, x));
-    app.at("/").post(|x| update(state, x));
-    app.listen(format!("{}:{}", ADDR, PORT))
-        .await
-        .expect("Web server crashed!")
 }
