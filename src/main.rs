@@ -1,4 +1,4 @@
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 use tokio::join;
 use tokio::sync::Mutex;
 
@@ -21,7 +21,7 @@ async fn main() {
         }
     }
 
-    trace!("Starting subprocesses...");
+    debug!("Starting subprocesses...");
     let _ = join!(discord::main(state), web::main(state), timeout::main(state));
 }
 
@@ -29,7 +29,7 @@ fn logger_init() {
     let env = env_logger::Env::default();
     env_logger::init_from_env(env);
 
-    trace!("Logger initialised succfully.")
+    debug!("Logger initialised succfully.")
 }
 
 fn leak<T>(x: T) -> &'static mut T {

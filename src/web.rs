@@ -58,7 +58,7 @@ async fn serve(state: &'static Mutex<State>) -> Response {
     let json = serde_json::to_string_pretty(&*state.lock().await);
     match json {
         Ok(json) => {
-            trace!("Responding with {json}");
+            debug!("Responding with {json}");
             json.into()
         }
         Err(e) => {
