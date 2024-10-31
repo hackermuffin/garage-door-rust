@@ -166,7 +166,7 @@ impl<'a> EventHandler for Handler<'a> {
 pub async fn main(state: &'static Mutex<State>) {
     debug!("Starting discord main...");
     // Login with a bot token from the environment
-    let token = state.lock().await.consts().discord_token.clone();
+    let token = state.lock().await.consts().discord_token.0.clone();
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES

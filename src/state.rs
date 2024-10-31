@@ -126,8 +126,7 @@ impl State {
 #[derive(Clone, Serialize)]
 pub struct Consts {
     // Discord bot token
-    #[serde(skip_serializing)]
-    pub discord_token: String,
+    pub discord_token: Secret,
 
     // Wait interval between discord updates
     pub discord_ping_loop_interval: Duration,
@@ -180,8 +179,9 @@ impl Consts {
         }
 
         Consts {
-            discord_token: get_env("DISCORD_TOKEN")
-                .expect("Could not retrive anv var DISCORD_TOKEN"),
+            discord_token: Secret(
+                get_env("DISCORD_TOKEN").expect("Could not retrive anv var DISCORD_TOKEN"),
+            ),
             discord_ping_loop_interval: get_duration("DISCORD_PING_LOOP_INTERVAL", 1),
             discord_presence_loop_interval: get_duration("DISCORD_PRESENCE_LOOP_INTERVAL", 1),
             discord_log_loop_interval: get_duration("DISCORD_LOG_LOOP_INTERVAL", 1),
@@ -234,5 +234,17 @@ impl Serialize for Duration {
     {
         let timedelta: chrono::TimeDelta = (*self).into();
         serializer.serialize_str(&timedelta.to_string())
+    }
+}
+
+#[derive(Clone)]
+pub struct Secret(pub String);
+
+impl Serialize for Secret {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str("<redacted>")
     }
 }
