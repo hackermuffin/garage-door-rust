@@ -2,7 +2,7 @@ use chrono::prelude::*;
 use serde::Serialize;
 use std::{env, fmt, ops::Mul};
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize)]
+#[derive(PartialEq, Eq, Copy, Clone, Serialize)]
 pub enum DoorPosition {
     Open,
     Closed,
@@ -123,7 +123,7 @@ impl State {
 }
 
 // Store const data that should be setup once then read only accessible through state
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Consts {
     // Discord bot token
     #[serde(skip_serializing)]
@@ -194,7 +194,7 @@ impl Consts {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Duration(u32);
 
 impl From<Duration> for tokio::time::Duration {
