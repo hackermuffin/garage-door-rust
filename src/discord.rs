@@ -29,7 +29,7 @@ async fn update_status(state: &Mutex<State>, ctx: Context) {
         ctx.set_presence(Some(ActivityData::playing(presence)), OnlineStatus::Online);
         trace!("Discord status update complete.");
 
-        sleep(discord_presence_loop_interval).await;
+        sleep(discord_presence_loop_interval.into()).await;
     }
 }
 
@@ -63,7 +63,7 @@ async fn check_ping(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
             debug!("Internal state updated.");
         }
 
-        sleep(consts.discord_ping_loop_interval).await;
+        sleep(consts.discord_ping_loop_interval.into()).await;
     }
 }
 
@@ -88,7 +88,7 @@ async fn log(state: &Mutex<State>, ctx: Context, data_about_bot: Ready) {
             prev_status = status;
         }
 
-        sleep(consts.discord_log_loop_interval).await;
+        sleep(consts.discord_log_loop_interval.into()).await;
     }
 }
 

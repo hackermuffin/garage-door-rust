@@ -1,8 +1,6 @@
-use chrono::{prelude::*, TimeDelta};
+use chrono::prelude::*;
 use serde::Serialize;
-use serde_with::{serde_as, DisplayFromStr};
-use std::{env, fmt};
-use tokio::time::Duration;
+use std::{env, fmt, ops::Mul};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize)]
 pub enum DoorPosition {
@@ -25,7 +23,6 @@ impl fmt::Display for DoorPosition {
     }
 }
 
-#[serde_as]
 #[derive(Serialize)]
 pub struct State {
     consts: Consts,
@@ -33,8 +30,7 @@ pub struct State {
     last_update: Option<DateTime<Local>>,
     open_time: Option<DateTime<Local>>,
     pings_sent: u32,
-    #[serde_as(as = "DisplayFromStr")]
-    current_ping_interval: TimeDelta,
+    current_ping_interval: Duration,
 }
 
 impl State {
@@ -81,7 +77,7 @@ impl State {
                 None => {}
                 Some(last_update) => {
                     let diff = Local::now() - last_update;
-                    if diff > self.consts.missing_timeout {
+                    if diff > self.consts.missing_timeout.into() {
                         self.missing();
                     }
                 }
@@ -93,7 +89,7 @@ impl State {
             DoorPosition::Missing => {
                 if self.last_update.is_some() {
                     let diff = Local::now() - self.last_update.unwrap();
-                    if diff > self.current_ping_interval {
+                    if diff > self.current_ping_interval.into() {
                         return Some(format!(
                             "@everyone Door is missing for {}",
                             self.current_ping_interval
@@ -105,7 +101,7 @@ impl State {
             DoorPosition::Open => {
                 if self.open_time.is_some() {
                     let diff = Local::now() - self.open_time.unwrap();
-                    if diff > self.current_ping_interval {
+                    if diff > self.current_ping_interval.into() {
                         return Some(format!(
                             "@everyone Door is open for {}",
                             self.current_ping_interval
@@ -127,7 +123,6 @@ impl State {
 }
 
 // Store const data that should be setup once then read only accessible through state
-#[serde_as]
 #[derive(Debug, Clone, Serialize)]
 pub struct Consts {
     // Discord bot token
@@ -145,12 +140,10 @@ pub struct Consts {
 
     // Missing times
     pub missing_loop_interval: Duration,
-    #[serde_as(as = "DisplayFromStr")]
-    pub missing_timeout: TimeDelta,
+    pub missing_timeout: Duration,
 
     // Other timing consts
-    #[serde_as(as = "DisplayFromStr")]
-    pub starting_ping_interval: TimeDelta,
+    pub starting_ping_interval: Duration,
 }
 
 impl Consts {
@@ -160,52 +153,86 @@ impl Consts {
             env::var(name).ok()
         }
 
-        fn get_duration(env_var: &str, default: Duration) -> Duration {
+        fn get_duration(env_var: &str, default: u32) -> Duration {
             let env = get_env(env_var);
             match env {
                 Some(str) => {
                     let val = str
-                        .parse::<u64>()
+                        .parse::<u32>()
                         .unwrap_or_else(|_| panic!("Invalid duration {}", str));
-                    Duration::from_secs(val)
+                    Duration(val)
                 }
-                None => default,
+                None => Duration(default),
             }
         }
 
-        fn get_timedelta(env_var: &str, default: TimeDelta) -> TimeDelta {
+        fn get_timedelta(env_var: &str, default: u32) -> Duration {
             let env = get_env(env_var);
             match env {
                 Some(str) => {
                     let val = str
-                        .parse::<i64>()
+                        .parse::<u32>()
                         .unwrap_or_else(|_| panic!("Invalid duration {}", str));
-                    TimeDelta::seconds(val)
+                    Duration(val)
                 }
-                None => default,
+                None => Duration(default),
             }
         }
 
         Consts {
             discord_token: get_env("DISCORD_TOKEN")
                 .expect("Could not retrive anv var DISCORD_TOKEN"),
-            discord_ping_loop_interval: get_duration(
-                "DISCORD_PING_LOOP_INTERVAL",
-                Duration::from_secs(1),
-            ),
-            discord_presence_loop_interval: get_duration(
-                "DISCORD_PRESENCE_LOOP_INTERVAL",
-                Duration::from_secs(1),
-            ),
-            discord_log_loop_interval: get_duration(
-                "DISCORD_LOG_LOOP_INTERVAL",
-                Duration::from_secs(1),
-            ),
+            discord_ping_loop_interval: get_duration("DISCORD_PING_LOOP_INTERVAL", 1),
+            discord_presence_loop_interval: get_duration("DISCORD_PRESENCE_LOOP_INTERVAL", 1),
+            discord_log_loop_interval: get_duration("DISCORD_LOG_LOOP_INTERVAL", 1),
             discord_ping_channel: get_env("DISCORD_PING_CHANNEL").unwrap_or("pings".to_string()),
             discord_log_channel: get_env("DISCORD_LOG_CHANNEL").unwrap_or("log".to_string()),
-            missing_loop_interval: get_duration("MISSING_LOOP_INTERVAL", Duration::from_secs(1)),
-            missing_timeout: get_timedelta("MISSING_TIMEOUT", TimeDelta::minutes(1)),
-            starting_ping_interval: get_timedelta("STARTING_PING_INTERVAL", TimeDelta::seconds(10)),
+            missing_loop_interval: get_duration("MISSING_LOOP_INTERVAL", 1),
+            missing_timeout: get_timedelta("MISSING_TIMEOUT", 60),
+            starting_ping_interval: get_timedelta("STARTING_PING_INTERVAL", 10),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Duration(u32);
+
+impl From<Duration> for tokio::time::Duration {
+    fn from(Duration(secs): Duration) -> tokio::time::Duration {
+        tokio::time::Duration::from_secs(secs as u64)
+    }
+}
+
+impl From<Duration> for chrono::TimeDelta {
+    fn from(Duration(secs): Duration) -> chrono::TimeDelta {
+        chrono::TimeDelta::seconds(secs as i64)
+    }
+}
+
+impl<T> Mul<T> for Duration
+where
+    u32: Mul<T, Output = u32>,
+{
+    type Output = Self;
+    fn mul(self, rhs: T) -> Self {
+        let Duration(secs) = self;
+        Self(secs * rhs)
+    }
+}
+
+impl fmt::Display for Duration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let timedelta: chrono::TimeDelta = (*self).into();
+        write!(f, "{timedelta}")
+    }
+}
+
+impl Serialize for Duration {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let timedelta: chrono::TimeDelta = (*self).into();
+        serializer.serialize_str(&timedelta.to_string())
     }
 }
