@@ -25,6 +25,7 @@ impl fmt::Display for DoorPosition {
 
 #[derive(Serialize)]
 pub struct State {
+    pub discord_init: bool,
     consts: Consts,
     status: DoorPosition,
     last_update: Option<DateTime<Local>>,
@@ -37,6 +38,7 @@ impl State {
     pub fn new() -> State {
         let consts = Consts::new();
         State {
+            discord_init: false,
             current_ping_interval: consts.starting_ping_interval,
             consts,
             status: DoorPosition::Missing,

@@ -146,12 +146,18 @@ struct Handler<'a> {
 #[async_trait]
 impl<'a> EventHandler for Handler<'a> {
     async fn ready(&self, ctx: Context, data_about_bot: Ready) {
-        debug!("Discord bot ready!");
-        join![
-            update_status(self.state, ctx.clone()),
-            check_ping(self.state, ctx.clone(), data_about_bot.clone()),
-            log(self.state, ctx, data_about_bot)
-        ];
+        let test = &mut self.state.lock().await.discord_init;
+        if *test {
+            debug!("Discord bot already started.")
+        } else {
+            *test = true;
+            debug!("Discord bot ready!");
+            join![
+                update_status(self.state, ctx.clone()),
+                check_ping(self.state, ctx.clone(), data_about_bot.clone()),
+                log(self.state, ctx, data_about_bot)
+            ];
+        }
     }
     async fn message(&self, ctx: Context, msg: Message) {
         ctx.set_presence(Some(ActivityData::playing("test")), OnlineStatus::Idle);
