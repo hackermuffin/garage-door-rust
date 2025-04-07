@@ -146,11 +146,11 @@ struct Handler<'a> {
 #[async_trait]
 impl<'a> EventHandler for Handler<'a> {
     async fn ready(&self, ctx: Context, data_about_bot: Ready) {
-        let test = &mut self.state.lock().await.discord_init;
-        if *test {
+        let test = self.state.lock().await.discord_init;
+        if test {
             debug!("Discord bot already started.")
         } else {
-            *test = true;
+            self.state.lock().await.discord_init = true;
             debug!("Discord bot ready!");
             join![
                 update_status(self.state, ctx.clone()),
